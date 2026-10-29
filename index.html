@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HelloWorld 合約測試</title>
+    <title>15373006 智能合約測試</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.15.0/ethers.umd.min.js" type="application/javascript"></script>
     <style>
         body { font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; line-height: 1.6; }
@@ -16,9 +16,10 @@
 </head>
 <body>
 
-    <h1>HelloWorld 合約測試</h1>
+    <h1>15373006 智能合約測試</h1>
     <div class="container">
-        <p>這是一個簡單的網頁，用於測試已部署在 Sepolia 網路上的 HelloWorld 合約。</p>
+        <p>學號：15373006｜Sepolia 智能合約互動測試</p>
+        <p class="note">指定測試錢包：0x6697B555238F855643e019187d019d82df63eB53</p>
         <hr>
 
         <h2>當前訊息</h2>
@@ -28,7 +29,7 @@
         <hr>
 
         <h2>更新訊息</h2>
-        <input type="text" id="newMessageInput" placeholder="輸入新的訊息..." />
+        <input type="text" id="newMessageInput" value="15373006" placeholder="輸入新的訊息..." />
         <button id="updateBtn" disabled>更新訊息</button>
         <div class="note">⚠️ 此操作會發送一筆交易，需要支付 Gas 費用。</div>
 
@@ -39,6 +40,9 @@
     </div>
 
     <script>
+        // 錢包地址用來核對目前連接的 MetaMask 帳號，並不是智能合約地址。
+        const EXPECTED_WALLET = "0x6697B555238F855643e019187d019d82df63eB53";
+        // 以下仍為原本範例的合約地址；要使用自己部署的合約，請替換此地址和 ABI。
         // 你的合約地址與 ABI
         const CONTRACT_ADDRESS = "0xa01aB66df445A718943Faf29D14589335FE32916"; // 請填入你的合約地址
         const CONTRACT_ABI = [
@@ -55,7 +59,7 @@
         const output = document.getElementById("output");
 
         // 定義 Ethers 相關變數
-        let provider, signer, contract;
+        let provider, signer, contract, readOnlyContract;
 
         // 函式：顯示日誌訊息
         function log(message) {
@@ -78,6 +82,17 @@
                 // 建立 Provider 與 Signer 實例
                 provider = new ethers.BrowserProvider(window.ethereum);
                 signer = await provider.getSigner();
+
+                const connectedAddress = await signer.getAddress();
+                if (connectedAddress.toLowerCase() !== EXPECTED_WALLET.toLowerCase()) {
+                    log(`目前連接的是 ${connectedAddress}，請在 MetaMask 切換至指定錢包 ${EXPECTED_WALLET}。`);
+                    return;
+                }
+                const network = await provider.getNetwork();
+                if (network.chainId !== 11155111n) {
+                    log("請先將 MetaMask 網路切換到 Sepolia 測試網，再重新連接。");
+                    return;
+                }
 
                 // 建立合約實例，並連接到 Signer (用於發送交易)
                 contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
