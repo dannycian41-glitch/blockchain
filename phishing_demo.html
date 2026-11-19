@@ -1,0 +1,324 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+  <title>ERC-20 釣魚攻擊教學模擬</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f4f7;
+      color: #333;
+      margin: 0;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 760px;
+      padding: 30px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px #0002;
+      text-align: center;
+    }
+
+    .warning {
+      background: #fff3cd;
+      border: 1px solid #ffe69c;
+      color: #664d03;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+
+    .info {
+      background: #f5f7fa;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: left;
+      margin: 20px 0;
+      overflow-wrap: anywhere;
+    }
+
+    button {
+      background: #d9534f;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 13px 24px;
+      margin: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #c9302c;
+    }
+
+    button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+
+    .secondary {
+      background: #436d91;
+    }
+
+    .secondary:hover {
+      background: #31536e;
+    }
+
+    .log {
+      background: #171e28;
+      color: #a8e6b0;
+      padding: 18px;
+      border-radius: 8px;
+      text-align: left;
+      min-height: 130px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-family: monospace;
+      font-size: 13px;
+      margin-top: 20px;
+    }
+
+    .risk {
+      color: #b42318;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+
+    <h1>⚠️ 惡意合約釣魚教學示範</h1>
+
+    <div class="warning">
+      <strong>DEMO ONLY — 教學模擬</strong>
+      <p>
+        本頁面不連接真實錢包，
+        不執行區塊鏈交易，
+        不會取得任何代幣授權。
+      </p>
+    </div>
+
+    <div class="info">
+      <h3>實驗設定</h3>
+
+      <p><strong>模擬使用者錢包：</strong></p>
+      <p id="walletAddress"></p>
+
+      <p><strong>mUSDT 代幣合約：</strong></p>
+      <p id="tokenAddress"></p>
+
+      <p><strong>模擬授權對象：</strong></p>
+      <p id="spenderAddress"></p>
+
+      <p><strong>授權數量：</strong></p>
+      <p class="risk">MaxUint256（模擬無限授權）</p>
+    </div>
+
+    <h2>釣魚攻擊流程模擬</h2>
+
+    <p id="status">
+      狀態：尚未開始
+    </p>
+
+    <button id="connectBtn">
+      ① 模擬連接 MetaMask
+    </button>
+
+    <button id="approveBtn" disabled>
+      ② 模擬授權 mUSDT
+    </button>
+
+    <button id="attackBtn" disabled>
+      ③ 模擬攻擊者操作
+    </button>
+
+    <button id="resetBtn" class="secondary">
+      重設實驗
+    </button>
+
+    <h3>操作紀錄（Console 模擬）</h3>
+
+    <div id="logs" class="log"></div>
+
+    <div class="warning">
+      <strong>安全觀念</strong>
+      <p>
+        ERC-20 approve() 可以讓指定 spender
+        在授權額度內使用持有者的代幣。
+        MaxUint256 是非常高的授權額度。
+      </p>
+      <p>
+        在真實環境中，如果授權對象具有
+        transferFrom() 的執行能力，
+        就可能在授權範圍內轉移使用者代幣。
+      </p>
+    </div>
+
+  </div>
+
+  <script>
+    "use strict";
+
+    // 使用者提供的 MetaMask 錢包地址
+    const USER_WALLET_ADDRESS =
+      "0x6697B555238F855643e019187d019d82df63eB53";
+
+    // 使用者提供的 mUSDT 代幣合約地址
+    // 尚未驗證實際鏈上合約類型
+    const MUSDT_CONTRACT_ADDRESS =
+      "0x7271fF92f77b07f43B322830e47cAf9dA41B3FeF";
+
+    // 教學用的虛擬授權對象
+    // 不代表真實部署的惡意合約
+    const DEMO_SPENDER_ADDRESS =
+      "0x000000000000000000000000000000000000dEaD";
+
+    // uint256 最大值
+    const MAX_UINT256 =
+      (2n ** 256n - 1n).toString();
+
+    let connected = false;
+    let approved = false;
+
+    const connectBtn =
+      document.getElementById("connectBtn");
+
+    const approveBtn =
+      document.getElementById("approveBtn");
+
+    const attackBtn =
+      document.getElementById("attackBtn");
+
+    const statusEl =
+      document.getElementById("status");
+
+    const logsEl =
+      document.getElementById("logs");
+
+    document.getElementById("walletAddress")
+      .textContent = USER_WALLET_ADDRESS;
+
+    document.getElementById("tokenAddress")
+      .textContent = MUSDT_CONTRACT_ADDRESS;
+
+    document.getElementById("spenderAddress")
+      .textContent = DEMO_SPENDER_ADDRESS;
+
+    function log(message) {
+      const time =
+        new Date().toLocaleTimeString("zh-TW");
+
+      logsEl.textContent +=
+        "[" + time + "] " + message + "\n";
+
+      console.log("[DEMO]", message);
+    }
+
+    function setStatus(message) {
+      statusEl.textContent = "狀態：" + message;
+    }
+
+    // 步驟一：模擬連接錢包
+    connectBtn.addEventListener("click", () => {
+      connected = true;
+
+      connectBtn.disabled = true;
+      approveBtn.disabled = false;
+
+      setStatus("已模擬連接錢包");
+
+      log("使用者點擊連接 MetaMask");
+      log("模擬錢包：" + USER_WALLET_ADDRESS);
+      log("未呼叫 eth_requestAccounts");
+      log("錢包連接流程模擬完成");
+    });
+
+    // 步驟二：模擬無限授權
+    approveBtn.addEventListener("click", () => {
+      if (!connected) return;
+
+      const confirmed = confirm(
+        "教學模擬：高風險 ERC-20 授權\n\n" +
+        "代幣：" + MUSDT_CONTRACT_ADDRESS +
+        "\n\n授權對象：" + DEMO_SPENDER_ADDRESS +
+        "\n\n授權額度：MaxUint256" +
+        "\n\n此操作僅模擬，不會發送交易。" +
+        "\n\n是否繼續模擬？"
+      );
+
+      if (!confirmed) {
+        log("使用者拒絕高風險授權");
+        setStatus("使用者拒絕授權");
+        return;
+      }
+
+      approved = true;
+
+      approveBtn.disabled = true;
+      attackBtn.disabled = false;
+
+      setStatus("已模擬批准無限授權");
+
+      log("使用者同意模擬授權");
+      log("Token: " + MUSDT_CONTRACT_ADDRESS);
+      log("Spender: " + DEMO_SPENDER_ADDRESS);
+      log("Amount: " + MAX_UINT256);
+      log("未呼叫 approve()");
+      log("未產生任何鏈上交易");
+    });
+
+    // 步驟三：模擬攻擊者利用授權
+    attackBtn.addEventListener("click", () => {
+      if (!approved) return;
+
+      setStatus("攻擊流程模擬完成");
+
+      log("模擬攻擊者檢查授權額度");
+      log("偵測到模擬的 MaxUint256 授權");
+      log("模擬攻擊者嘗試 transferFrom()");
+      log("示範：授權可能導致代幣被轉移");
+      log("實際轉移數量：0");
+      log("沒有區塊鏈交易，也沒有資產損失");
+
+      attackBtn.disabled = true;
+
+      alert(
+        "釣魚攻擊教學模擬完成！\n\n" +
+        "你已觀察到無限授權的風險。\n" +
+        "本次沒有真正執行任何交易。"
+      );
+    });
+
+    // 重設
+    document.getElementById("resetBtn")
+      .addEventListener("click", () => {
+        connected = false;
+        approved = false;
+
+        connectBtn.disabled = false;
+        approveBtn.disabled = true;
+        attackBtn.disabled = true;
+
+        logsEl.textContent = "";
+        setStatus("尚未開始");
+
+        log("實驗已重設");
+      });
+
+    log("ERC-20 釣魚攻擊教學環境已載入");
+    log("目前為純前端模擬模式");
+  </script>
+</body>
+</html>
