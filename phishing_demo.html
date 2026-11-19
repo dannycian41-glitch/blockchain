@@ -1,324 +1,135 @@
-
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1.0">
-  <title>ERC-20 釣魚攻擊教學模擬</title>
-
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f0f4f7;
-      color: #333;
-      margin: 0;
-      padding: 24px;
-      display: flex;
-      justify-content: center;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 760px;
-      padding: 30px;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px #0002;
-      text-align: center;
-    }
-
-    .warning {
-      background: #fff3cd;
-      border: 1px solid #ffe69c;
-      color: #664d03;
-      padding: 15px;
-      border-radius: 8px;
-      margin: 20px 0;
-    }
-
-    .info {
-      background: #f5f7fa;
-      padding: 15px;
-      border-radius: 8px;
-      text-align: left;
-      margin: 20px 0;
-      overflow-wrap: anywhere;
-    }
-
-    button {
-      background: #d9534f;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      padding: 13px 24px;
-      margin: 8px;
-      cursor: pointer;
-      font-size: 16px;
-      font-weight: bold;
-    }
-
-    button:hover {
-      background: #c9302c;
-    }
-
-    button:disabled {
-      background: #aaa;
-      cursor: not-allowed;
-    }
-
-    .secondary {
-      background: #436d91;
-    }
-
-    .secondary:hover {
-      background: #31536e;
-    }
-
-    .log {
-      background: #171e28;
-      color: #a8e6b0;
-      padding: 18px;
-      border-radius: 8px;
-      text-align: left;
-      min-height: 130px;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      font-family: monospace;
-      font-size: 13px;
-      margin-top: 20px;
-    }
-
-    .risk {
-      color: #b42318;
-      font-weight: bold;
-    }
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ERC-20 授權釣魚：鏈上實驗與風險示範</title>
+<style>
+*{box-sizing:border-box}body{font:16px/1.65 system-ui,"Noto Sans TC",sans-serif;background:#101827;color:#eef4ff;margin:0;padding:24px}
+main{max-width:850px;margin:auto;padding:28px;background:#1d2a3c;border-radius:15px;box-shadow:0 12px 35px #0004}
+h1{line-height:1.3}.notice{padding:16px;background:#4a361f;border:1px solid #9f7848;border-radius:10px}
+.panel{background:#111d2e;border-radius:10px;padding:15px;margin:16px 0;overflow-wrap:anywhere}
+button{font:inherit;font-weight:700;background:#51dbb5;border:0;padding:10px 17px;border-radius:9px;margin:5px;cursor:pointer;color:#11231f}
+button:disabled{opacity:.35;cursor:not-allowed}.muted{background:#cad4e7}.orange{background:#ffd08a}
+code{overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;min-height:110px;max-height:350px;overflow:auto;background:#0c1523;padding:15px;border-radius:9px}
+small{color:#b8c9df}a{color:#afddff}.warn{color:#ffcd8a}
+</style>
 </head>
-
-<body>
-  <div class="container">
-
-    <h1>⚠️ 惡意合約釣魚教學示範</h1>
-
-    <div class="warning">
-      <strong>DEMO ONLY — 教學模擬</strong>
-      <p>
-        本頁面不連接真實錢包，
-        不執行區塊鏈交易，
-        不會取得任何代幣授權。
-      </p>
-    </div>
-
-    <div class="info">
-      <h3>實驗設定</h3>
-
-      <p><strong>模擬使用者錢包：</strong></p>
-      <p id="walletAddress"></p>
-
-      <p><strong>mUSDT 代幣合約：</strong></p>
-      <p id="tokenAddress"></p>
-
-      <p><strong>模擬授權對象：</strong></p>
-      <p id="spenderAddress"></p>
-
-      <p><strong>授權數量：</strong></p>
-      <p class="risk">MaxUint256（模擬無限授權）</p>
-    </div>
-
-    <h2>釣魚攻擊流程模擬</h2>
-
-    <p id="status">
-      狀態：尚未開始
-    </p>
-
-    <button id="connectBtn">
-      ① 模擬連接 MetaMask
-    </button>
-
-    <button id="approveBtn" disabled>
-      ② 模擬授權 mUSDT
-    </button>
-
-    <button id="attackBtn" disabled>
-      ③ 模擬攻擊者操作
-    </button>
-
-    <button id="resetBtn" class="secondary">
-      重設實驗
-    </button>
-
-    <h3>操作紀錄（Console 模擬）</h3>
-
-    <div id="logs" class="log"></div>
-
-    <div class="warning">
-      <strong>安全觀念</strong>
-      <p>
-        ERC-20 approve() 可以讓指定 spender
-        在授權額度內使用持有者的代幣。
-        MaxUint256 是非常高的授權額度。
-      </p>
-      <p>
-        在真實環境中，如果授權對象具有
-        transferFrom() 的執行能力，
-        就可能在授權範圍內轉移使用者代幣。
-      </p>
-    </div>
-
-  </div>
-
-  <script>
-    "use strict";
-
-    // 使用者提供的 MetaMask 錢包地址
-    const USER_WALLET_ADDRESS =
-      "0x6697B555238F855643e019187d019d82df63eB53";
-
-    // 使用者提供的 mUSDT 代幣合約地址
-    // 尚未驗證實際鏈上合約類型
-    const MUSDT_CONTRACT_ADDRESS =
-      "0x7271fF92f77b07f43B322830e47cAf9dA41B3FeF";
-
-    // 教學用的虛擬授權對象
-    // 不代表真實部署的惡意合約
-    const DEMO_SPENDER_ADDRESS =
-      "0x000000000000000000000000000000000000dEaD";
-
-    // uint256 最大值
-    const MAX_UINT256 =
-      (2n ** 256n - 1n).toString();
-
-    let connected = false;
-    let approved = false;
-
-    const connectBtn =
-      document.getElementById("connectBtn");
-
-    const approveBtn =
-      document.getElementById("approveBtn");
-
-    const attackBtn =
-      document.getElementById("attackBtn");
-
-    const statusEl =
-      document.getElementById("status");
-
-    const logsEl =
-      document.getElementById("logs");
-
-    document.getElementById("walletAddress")
-      .textContent = USER_WALLET_ADDRESS;
-
-    document.getElementById("tokenAddress")
-      .textContent = MUSDT_CONTRACT_ADDRESS;
-
-    document.getElementById("spenderAddress")
-      .textContent = DEMO_SPENDER_ADDRESS;
-
-    function log(message) {
-      const time =
-        new Date().toLocaleTimeString("zh-TW");
-
-      logsEl.textContent +=
-        "[" + time + "] " + message + "\n";
-
-      console.log("[DEMO]", message);
-    }
-
-    function setStatus(message) {
-      statusEl.textContent = "狀態：" + message;
-    }
-
-    // 步驟一：模擬連接錢包
-    connectBtn.addEventListener("click", () => {
-      connected = true;
-
-      connectBtn.disabled = true;
-      approveBtn.disabled = false;
-
-      setStatus("已模擬連接錢包");
-
-      log("使用者點擊連接 MetaMask");
-      log("模擬錢包：" + USER_WALLET_ADDRESS);
-      log("未呼叫 eth_requestAccounts");
-      log("錢包連接流程模擬完成");
-    });
-
-    // 步驟二：模擬無限授權
-    approveBtn.addEventListener("click", () => {
-      if (!connected) return;
-
-      const confirmed = confirm(
-        "教學模擬：高風險 ERC-20 授權\n\n" +
-        "代幣：" + MUSDT_CONTRACT_ADDRESS +
-        "\n\n授權對象：" + DEMO_SPENDER_ADDRESS +
-        "\n\n授權額度：MaxUint256" +
-        "\n\n此操作僅模擬，不會發送交易。" +
-        "\n\n是否繼續模擬？"
-      );
-
-      if (!confirmed) {
-        log("使用者拒絕高風險授權");
-        setStatus("使用者拒絕授權");
-        return;
-      }
-
-      approved = true;
-
-      approveBtn.disabled = true;
-      attackBtn.disabled = false;
-
-      setStatus("已模擬批准無限授權");
-
-      log("使用者同意模擬授權");
-      log("Token: " + MUSDT_CONTRACT_ADDRESS);
-      log("Spender: " + DEMO_SPENDER_ADDRESS);
-      log("Amount: " + MAX_UINT256);
-      log("未呼叫 approve()");
-      log("未產生任何鏈上交易");
-    });
-
-    // 步驟三：模擬攻擊者利用授權
-    attackBtn.addEventListener("click", () => {
-      if (!approved) return;
-
-      setStatus("攻擊流程模擬完成");
-
-      log("模擬攻擊者檢查授權額度");
-      log("偵測到模擬的 MaxUint256 授權");
-      log("模擬攻擊者嘗試 transferFrom()");
-      log("示範：授權可能導致代幣被轉移");
-      log("實際轉移數量：0");
-      log("沒有區塊鏈交易，也沒有資產損失");
-
-      attackBtn.disabled = true;
-
-      alert(
-        "釣魚攻擊教學模擬完成！\n\n" +
-        "你已觀察到無限授權的風險。\n" +
-        "本次沒有真正執行任何交易。"
-      );
-    });
-
-    // 重設
-    document.getElementById("resetBtn")
-      .addEventListener("click", () => {
-        connected = false;
-        approved = false;
-
-        connectBtn.disabled = false;
-        approveBtn.disabled = true;
-        attackBtn.disabled = true;
-
-        logsEl.textContent = "";
-        setStatus("尚未開始");
-
-        log("實驗已重設");
-      });
-
-    log("ERC-20 釣魚攻擊教學環境已載入");
-    log("目前為純前端模擬模式");
-  </script>
-</body>
-</html>
+<body><main>
+<h1>⚠️ ERC-20 授權釣魚：教學實驗</h1>
+<div class="notice"><b>教學環境 / DEMO ONLY</b><p>這個網頁會在指定測試網路執行真正的 MetaMask 授權與撤銷交易；授權對象永遠是你自己連接的錢包、額度最多 1 個測試代幣。下方「攻擊者轉移」是視覺模擬，不會轉移資產。不要輸入助記詞或私鑰。</p></div>
+<div class="panel">
+<div>指定教學錢包：<code id="expected"></code></div>
+<div>提供的代幣地址：<code id="token"></code></div>
+<div>可用網路：Sepolia (11155111) / 本地 Anvil (31337)</div>
+<div>真實授權對象：<b>連接錢包本身</b></div>
+<div>最高實際授權：1 個代幣（依 decimals 換算）</div>
+</div>
+<h2>一、真實鏈上授權實驗</h2>
+<button id="connect">1. 連接 MetaMask</button>
+<button id="check" class="muted" disabled>2. 查詢 allowance</button>
+<button id="approve" disabled>3. approve(1 代幣)</button>
+<button id="revoke" class="orange" disabled>4. 撤銷授權</button>
+<div class="panel">
+<div>連線帳戶：<code id="account">尚未連接</code></div>
+<div>Chain ID：<span id="chain">—</span></div>
+<div>授權額度：<span id="allowance">—</span></div>
+<div>最近交易：<span id="tx">—</span></div>
+<div id="status">狀態：等待連接</div>
+</div>
+<h2>二、釣魚攻擊原理（無資產轉移）</h2>
+<p>正常授權：<code>approve(spender, amount)</code>。危險情況：將 <code>amount</code> 換成 <code>MaxUint256</code>，讓不可信任的合約或帳戶擁有極高的可用授權額度。</p>
+<button id="simulate" class="orange">5. 示範攻擊者 transferFrom()</button>
+<div class="panel" id="attack">尚未執行風險示範。</div>
+<h2>操作紀錄</h2>
+<pre id="logs" aria-live="polite"></pre>
+<small>本頁的鏈上交易只有 approve / allowance / decimals；不包含鏈上的 MaxUint256 授權或 transferFrom 交易。提供的代幣地址尚未驗證是否在上述測試鏈部署，如查無合約，請改用在測試鏈部署的無價值代幣。</small>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
+<script>
+"use strict";
+const EXPECTED = "0x6697B555238F855643e019187d019d82df63eB53";
+const TOKEN = "0x7271fF92f77b07f43B322830e47cAf9dA41B3FeF";
+const CHAINS = new Set([11155111n, 31337n]);
+const ABI = [
+  "function approve(address spender,uint256 amount) returns (bool)",
+  "function allowance(address owner,address spender) view returns (uint256)",
+  "function decimals() view returns (uint8)"
+];
+const $ = id => document.getElementById(id);
+$("expected").textContent = EXPECTED; $("token").textContent = TOKEN;
+let provider, signer, contract, account, decimals, busy=false;
+const log = s => { $("logs").textContent += "["+new Date().toLocaleTimeString("zh-TW")+"] "+s+"\n"; };
+const status = s => { $("status").textContent="狀態："+s; log(s); };
+function enable(ok) {
+  $("connect").disabled=busy;
+  for(const id of ["check","approve","revoke"]) $(id).disabled=!ok||busy;
+}
+async function checkChain(){
+  const net=await provider.getNetwork();
+  $("chain").textContent=String(net.chainId);
+  if(!CHAINS.has(net.chainId))throw Error("只允許 Sepolia 或本地 Anvil 測試鏈，不允許主網。");
+}
+function ensureWallet(){
+  if(!window.ethereum)throw Error("請使用安裝 MetaMask 的瀏覽器。");
+  if(!window.ethers)throw Error("ethers.js 載入失敗，請檢查網路連線。");
+}
+async function connect(){
+  busy=true;enable(false);
+  try{
+    ensureWallet();
+    const addresses=await window.ethereum.request({method:"eth_requestAccounts"});
+    const chosen=ethers.getAddress(addresses[0]);
+    if(chosen.toLowerCase()!==EXPECTED.toLowerCase())throw Error("請選擇指定的教學錢包，不能使用其他訪客錢包。");
+    provider=new ethers.BrowserProvider(window.ethereum);
+    await checkChain();
+    signer=await provider.getSigner();
+    account=await signer.getAddress();
+    const code=await provider.getCode(TOKEN);
+    if(code==="0x")throw Error("目前測試鏈上沒有此代幣合約；請先部署測試代幣。");
+    contract=new ethers.Contract(TOKEN,ABI,signer);
+    decimals=Number(await contract.decimals());
+    if(!Number.isInteger(decimals)||decimals<0||decimals>36)throw Error("代幣 decimals 不在支援範圍。");
+    $("account").textContent=account;
+    status("錢包已連接，可以進行有限授權測試。");
+    await refresh();
+  }catch(e){contract=null;status("連線失敗："+(e.shortMessage||e.message||e));}
+  finally{busy=false;enable(!!contract);}
+}
+async function refresh(){
+  await checkChain();
+  const amount=await contract.allowance(account,account);
+  $("allowance").textContent=ethers.formatUnits(amount,decimals)+" 個代幣";
+  log("鏈上 allowance(owner, owner) = "+amount.toString());
+}
+async function action(kind){
+  if(!contract)return;
+  busy=true;enable(false);
+  try{
+    await checkChain();
+    const now=ethers.getAddress(await signer.getAddress());
+    if(now.toLowerCase()!==EXPECTED.toLowerCase())throw Error("錢包帳戶已切換，請重新連接。");
+    if(kind==="check"){await refresh();return;}
+    const amount=kind==="approve"?ethers.parseUnits("1",decimals):0n;
+    if(!confirm("這會送出真正的測試鏈 approve 交易。\n授權對象：目前錢包自己\n額度："+(kind==="approve"?"1 個測試代幣":"0（撤銷）")+"\n確認繼續？"))return;
+    const tx=await contract.approve(account,amount);
+    $("tx").textContent=tx.hash;
+    log("交易送出："+tx.hash);
+    const receipt=await tx.wait();
+    status("區塊 "+receipt.blockNumber+" 已確認；"+(kind==="approve"?"授權完成":"授權已撤銷"));
+    await refresh();
+  }catch(e){status("操作未完成："+(e.shortMessage||e.message||e));}
+  finally{busy=false;enable(!!contract);}
+}
+$("connect").addEventListener("click",connect);
+$("check").addEventListener("click",()=>action("check"));
+$("approve").addEventListener("click",()=>action("approve"));
+$("revoke").addEventListener("click",()=>action("revoke"));
+$("simulate").addEventListener("click",()=>{
+  const max=(2n**256n-1n).toString();
+  $("attack").textContent="【純教學模擬】假設使用者對不可信任的 spender 授權 MaxUint256（"+max+"），對方若具有可用的 transferFrom 權限，就可能在授權範圍內轉走代幣。此步驟沒有呼叫區塊鏈、沒有送出交易，也沒有轉移資產。";
+  log("風險示範：MaxUint256 授權 → 攻擊者 transferFrom()；沒有發出任何交易。");
+});
+window.ethereum?.on?.("accountsChanged",()=>{contract=null;account=null;$("account").textContent="帳戶已改變";enable(false);status("帳戶已變更，請重新連接。");});
+window.ethereum?.on?.("chainChanged",()=>{contract=null;enable(false);status("網路已變更，請重新連接。");});
+log("實驗已載入。");
+</script></body></html>
